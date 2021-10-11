@@ -86,7 +86,7 @@ public class SecurityDB extends SecurityDBBase {
 
     @Override
     public boolean remove(String passportId) {
-        if (hashMap.remove(calculateHashCode(passportId)) == null) {
+        if (hashMap.remove(calculateHashCode(passportId), passportId) == null) {
             return false;
         }
         return true;
@@ -94,7 +94,26 @@ public class SecurityDB extends SecurityDBBase {
 
     @Override
     public boolean addPassenger(String name, String passportId) {
-        if (hashMap.put(calculateHashCode(passportId), name) != null) {
+        SecurityHashMap.SecurityHashMapEntry entry =
+                hashMap.getEntry(calculateHashCode(passportId), passportId);
+        if (entry != null) {
+            if (entry.getPassportId().equals(passportId) && !entry.getValue().equals(name)) {
+                System.err.print("Suspicious behaviour");
+                return false;
+            }
+
+            if(entry.getPassportId().equals(passportId) && entry.getValue().equals(name)) {
+                if (entry.getAttempts() < 5) {
+                    hashMap.updateAttempts(calculateHashCode(passportId), passportId);
+                    return true; // no point of adding it because it's already there
+                } else {
+                    System.err.print("Suspicious behaviour");
+                    return false;
+                }
+            }
+        }
+
+        if (hashMap.put(calculateHashCode(passportId),passportId, name) != null) {
             return true;
         }
 
@@ -160,9 +179,51 @@ class SecurityHashMap {
         capacity = maxCapacity;
     }
 
-    public String put(int key, String value) {
+    public SecurityHashMapEntry getEntry(int key, String original) {
         int hashIndex = getIndex(key);
-        SecurityHashMapEntry entry = new SecurityHashMapEntry(key, value);
+
+        if (isEmpty()) {
+            return null;
+        }
+
+        for (int i = 0; i < capacity; i++) {
+            if (buckets[hashIndex] != null && buckets[hashIndex].getPassportId().equals(original)) {
+                return buckets[hashIndex];
+            }
+
+            if (hashIndex + 1 < capacity) {
+                hashIndex++; //
+            } else {
+                hashIndex = 0;
+            }
+        }
+        return null;
+    }
+
+    public void updateAttempts(int key, String original) {
+        int hashIndex = getIndex(key);
+
+        if (isEmpty()) {
+            return; // nothing to do
+        }
+
+        for (int i = 0; i < capacity; i++) {
+            if (buckets[hashIndex] != null && buckets[hashIndex].getPassportId().equals(original)) {
+                SecurityHashMapEntry entry = buckets[hashIndex];
+                entry.setAttempts(entry.getAttempts() + 1);
+            }
+
+            if (hashIndex + 1 < capacity) {
+                hashIndex++; //
+            } else {
+                hashIndex = 0;
+            }
+        }
+    }
+
+    public String put(int key, String passportId, String value) {
+        int hashIndex = getIndex(key);
+        SecurityHashMapEntry entry = new SecurityHashMapEntry(key, passportId, value);
 
         if (size == maxCapacity) {
             return null; // Maximum capacity reached
@@ -172,9 +233,9 @@ class SecurityHashMap {
             increaseToMaxCapacity();
         }
 
-
         for (int i = 0; i < capacity; i++) {
-            if (buckets[hashIndex] == null) {
+            SecurityHashMapEntry entryFound = buckets[hashIndex];
+            if (entryFound == null) {
                 buckets[hashIndex] = entry;
                 size++;
                 return entry.getValue();
@@ -199,7 +260,7 @@ class SecurityHashMap {
      * @return null if key couldn't be found or is empty,
      * returns removed entry value otherwise
      */
-    public String remove(int key) {
+    public String remove(int key, String original) {
         int hashIndex = getIndex(key);
 
         if (isEmpty()) {
@@ -207,7 +268,7 @@ class SecurityHashMap {
         }
 
         for (int i = 0; i < capacity; i++) {
-            if (buckets[hashIndex] != null && buckets[hashIndex].getKey() == key) {
+            if (buckets[hashIndex] != null && buckets[hashIndex].getPassportId().equals(original)) {
                 String value = buckets[hashIndex].getValue();
                 buckets[hashIndex] = null;
                 size--;
@@ -269,11 +330,31 @@ class SecurityHashMap {
 
     static class SecurityHashMapEntry {
         int key;
+        int attempts;
+        String passportId;
         String value;
 
-        public SecurityHashMapEntry(int key, String value) {
+        public SecurityHashMapEntry(int key, String passportId, String value) {
+            attempts = 0;
             this.key = key;
+            this.passportId = passportId;
             this.value = value;
+        }
+
+        public String getPassportId() {
+            return passportId;
+        }
+
+        public void setPassportId(String passportId) {
+            this.passportId = passportId;
+        }
+
+        public int getAttempts() {
+            return attempts;
+        }
+
+        public void setAttempts(int attempts) {
+            this.attempts = attempts;
         }
 
         public int getKey() {
