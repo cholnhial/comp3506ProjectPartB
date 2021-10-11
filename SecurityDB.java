@@ -28,7 +28,7 @@ public class SecurityDB extends SecurityDBBase {
         Note: to enable assertions, you need to add the "-ea" flag to the
         VM options of SecurityDB's run configuration
      */
-    public static void main(String[] args) {
+    /*public static void main(String[] args) {
         SecurityDB db = new SecurityDB(3, 2);
 
         // add
@@ -53,7 +53,7 @@ public class SecurityDB extends SecurityDBBase {
         db.addPassenger("Rob Bekker", "Asb23f");
         db.addPassenger("Robert Bekker", "Asb23f");
         // Should print a warning to stderr
-    }
+    }*/
 
     @Override
     public int calculateHashCode(String key) {
