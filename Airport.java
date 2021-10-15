@@ -28,16 +28,16 @@ public class Airport extends AirportBase {
     @Override
     public TerminalBase opposite(ShuttleBase shuttle, TerminalBase terminal) {
         var vertex = terminalVertices.get(terminal);
-        var edge  = shuttleEdges.get(shuttle);
+        var edge = shuttleEdges.get(shuttle);
 
-        var oppositeVertex =  adjacencyMap.opposite(vertex, edge);
+        var oppositeVertex = adjacencyMap.opposite(vertex, edge);
 
-        return  oppositeVertex == null ? null : oppositeVertex.getElement();
+        return oppositeVertex == null ? null : oppositeVertex.getElement();
     }
 
     @Override
     public TerminalBase insertTerminal(TerminalBase terminal) {
-        if(terminal != null) {
+        if (terminal != null) {
             var vertex = adjacencyMap.insertVertex(terminal);
             terminalVertices.put(terminal, vertex);
             return vertex.getElement();
@@ -107,17 +107,17 @@ public class Airport extends AirportBase {
                 });
 
         // Sort in order traveled
-        var  sortedMap =  shortestPathMap.entrySet().
+        var sortedMap = shortestPathMap.entrySet().
                 stream().
                 sorted(Map.Entry.comparingByValue()).
                 collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
-        if(sortedMap.get(destinationVertex) > 0) {
+        if (sortedMap.get(destinationVertex) > 0) {
             // test if origin has a path directly to destination
-            if(shuttleBetween(origin, destination) != null) {
+            if (shuttleBetween(origin, destination) != null) {
                 // remove all other nodes other than origin and destination
-              sortedMap.entrySet().removeIf(e -> !e.getKey().getElement().getId().equals(origin.getId()) &&
-                      !e.getKey().getElement().getId().equals(destination.getId()));
+                sortedMap.entrySet().removeIf(e -> !e.getKey().getElement().getId().equals(origin.getId()) &&
+                        !e.getKey().getElement().getId().equals(destination.getId()));
             }
         }
 
@@ -128,7 +128,7 @@ public class Airport extends AirportBase {
      * Helper method to build path
      *
      * @param destination
-     * @param sortedMap the sorted map returned from Dijkstra's algorithm
+     * @param sortedMap   the sorted map returned from Dijkstra's algorithm
      * @return the path
      */
     private Path getPath(TerminalBase destination, LinkedHashMap<AdjacencyMap<TerminalBase,
@@ -164,7 +164,7 @@ public class Airport extends AirportBase {
     /**
      * Helper method that returns the edge between two vertices
      *
-     * @param origin vertex
+     * @param origin      vertex
      * @param destination vertex
      * @return the edge between the two vertices or null
      */
@@ -172,7 +172,7 @@ public class Airport extends AirportBase {
         var originVertex = terminalVertices.get(origin);
         var destinationVertex = terminalVertices.get(destination);
 
-        var edge =  adjacencyMap.getEdge(originVertex, destinationVertex);
+        var edge = adjacencyMap.getEdge(originVertex, destinationVertex);
         if (edge != null) {
             return edge.getElement();
         }
@@ -186,11 +186,11 @@ public class Airport extends AirportBase {
 
         var shortestPathMap =
                 GraphUtilities.shortestPathDijkstra(this.adjacencyMap, originVertex, (e) -> {
-            return e.getTime();
-        });
+                    return e.getTime();
+                });
 
         // Sort in order traveled
-        var  sortedMap =  shortestPathMap.entrySet().
+        var sortedMap = shortestPathMap.entrySet().
                 stream().
                 sorted(Map.Entry.comparingByValue()).
                 collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
@@ -230,60 +230,7 @@ public class Airport extends AirportBase {
 
         /* Implement all the necessary methods of the Shuttle here */
     }
-
-    /*
-        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        REMOVE THE MAIN FUNCTION BEFORE SUBMITTING TO THE AUTOGRADER
-        !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-        The following main function is provided for simple debugging only
-
-        Note: to enable assertions, you need to add the "-ea" flag to the
-        VM options of Airport's run configuration
-     */
-    public static void main(String[] args) {
-        Airport a = new Airport(3);
-        Terminal terminalA = (Terminal) a.insertTerminal(new Terminal("A", 1));
-        Terminal terminalB = (Terminal) a.insertTerminal(new Terminal("B", 3));
-        Terminal terminalC = (Terminal) a.insertTerminal(new Terminal("C", 4));
-        Terminal terminalD = (Terminal) a.insertTerminal(new Terminal("D", 2));
-
-        Shuttle shuttle1 = (Shuttle) a.insertShuttle(terminalA, terminalB, 2);
-        Shuttle shuttle2 = (Shuttle) a.insertShuttle(terminalA, terminalC, 5);
-        Shuttle shuttle3 = (Shuttle) a.insertShuttle(terminalA, terminalD, 18);
-        Shuttle shuttle4 = (Shuttle) a.insertShuttle(terminalB, terminalD, 8);
-        Shuttle shuttle5 = (Shuttle) a.insertShuttle(terminalC, terminalD, 15);
-
-        // Opposite
-        assert a.opposite(shuttle1, terminalA).getId().equals("B");
-
-        // Outgoing Shuttles
-        assert a.outgoingShuttles(terminalA).stream()
-                .map(ShuttleBase::getTime)
-                .collect(Collectors.toList()).containsAll(List.of(2, 5, 18));
-
-        // Remove Terminal
-        a.removeTerminal(terminalC);
-        assert a.outgoingShuttles(terminalA).stream()
-                .map(ShuttleBase::getTime)
-                .collect(Collectors.toList()).containsAll(List.of(2, 18));
-
-        // Shortest path
-        Path shortestPath = a.findShortestPath(terminalA, terminalD);
-        assert shortestPath.terminals.stream()
-                .map(TerminalBase::getId)
-                .collect(Collectors.toList()).equals(List.of("A", "D"));
-        assert shortestPath.time == 19;
-
-        // Fastest path
-        Path fastestPath = a.findFastestPath(terminalA, terminalD);
-        assert fastestPath.terminals.stream()
-                .map(TerminalBase::getId)
-                .collect(Collectors.toList()).equals(List.of("A", "B", "D"));
-        assert fastestPath.time == 14;
-    }
 }
-
 
 /**
  *  Represents a position in a list
@@ -300,7 +247,7 @@ interface Position<E> {
  */
 class PositionalLinkedList<E> {
 
-    private static class Node<E> implements Position<E> {
+    private  class Node<E> implements Position<E> {
         private E element;
 
         private Node<E> prev;
