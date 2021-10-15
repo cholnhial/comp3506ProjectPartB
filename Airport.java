@@ -1,13 +1,14 @@
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
+
 public class Airport extends AirportBase {
-    private AdjacencyMap<TerminalBase, ShuttleBase> adjacencyMap;
-    private Map<TerminalBase, AdjacencyMap<TerminalBase, ShuttleBase>.Vertex<TerminalBase>> terminalVertices;
-    private Map<ShuttleBase, AdjacencyMap<TerminalBase, ShuttleBase>.Edge<ShuttleBase>> shuttleEdges;
+    private final AdjacencyMap<TerminalBase, ShuttleBase> adjacencyMap;
+    private final Map<TerminalBase, AdjacencyMap<TerminalBase, ShuttleBase>.Vertex<TerminalBase>> terminalVertices;
+    private final Map<ShuttleBase, AdjacencyMap<TerminalBase, ShuttleBase>.Edge<ShuttleBase>> shuttleEdges;
+    private final Map<ShuttleBase, Integer> shuttleCapacity;
 
     /**
      * Creates a new AirportBase instance with the given capacity.
@@ -20,6 +21,7 @@ public class Airport extends AirportBase {
         adjacencyMap = new AdjacencyMap<>();
         terminalVertices = new HashMap<>(); // represents vertices
         shuttleEdges = new HashMap<>();
+        shuttleCapacity = new HashMap<>();
     }
 
 
@@ -52,6 +54,7 @@ public class Airport extends AirportBase {
             ShuttleBase shuttle = new Shuttle(origin, destination, time);
             var edge = adjacencyMap.insertEdge(originVertex, destinationVertex, shuttle);
             shuttleEdges.put(shuttle, edge);
+            shuttleCapacity.put(shuttle, this.getCapacity());
             return shuttle;
         }
 
@@ -95,12 +98,104 @@ public class Airport extends AirportBase {
 
     @Override
     public Path findShortestPath(TerminalBase origin, TerminalBase destination) {
+        var originVertex = terminalVertices.get(origin);
+        var destinationVertex = terminalVertices.get(destination);
+
+        var shortestPathMap =
+                GraphUtilities.shortestPathDijkstra(this.adjacencyMap, originVertex, (e) -> {
+                    return e.getTime();
+                });
+
+        // Sort in order traveled
+        var  sortedMap =  shortestPathMap.entrySet().
+                stream().
+                sorted(Map.Entry.comparingByValue()).
+                collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+
+        if(sortedMap.get(destinationVertex) > 0) {
+            // test if origin has a path directly to destination
+            if(shuttleBetween(origin, destination) != null) {
+                // remove all other nodes other than origin and destination
+              sortedMap.entrySet().removeIf(e -> !e.getKey().getElement().getId().equals(origin.getId()) &&
+                      !e.getKey().getElement().getId().equals(destination.getId()));
+            }
+        }
+
+        return getPath(destination, (LinkedHashMap<AdjacencyMap<TerminalBase, ShuttleBase>.Vertex<TerminalBase>, Integer>) sortedMap);
+    }
+
+    /**
+     * Helper method to build path
+     *
+     * @param destination
+     * @param sortedMap the sorted map returned from Dijkstra's algorithm
+     * @return the path
+     */
+    private Path getPath(TerminalBase destination, LinkedHashMap<AdjacencyMap<TerminalBase,
+            ShuttleBase>.Vertex<TerminalBase>, Integer> sortedMap) {
+        int totalTime = 0;
+        List<TerminalBase> path = new ArrayList<>();
+        var iter = sortedMap.keySet().iterator();
+        var lastOrigin = iter.next();
+        totalTime += lastOrigin.getElement().getWaitingTime();
+        path.add(lastOrigin.getElement());
+        while (iter.hasNext()) {
+            var d = iter.next();
+            ShuttleBase shuttle = shuttleBetween(lastOrigin.getElement(), d.getElement());
+            int capacity = shuttleCapacity.get(shuttle);
+            capacity--;
+            shuttleCapacity.put(shuttle, capacity);
+            if (capacity == 0) {
+                shuttleCapacity.remove(shuttle);
+                adjacencyMap.removeEdge(shuttleEdges.get(shuttle));
+                shuttleEdges.remove(shuttle);
+            }
+            if (!d.getElement().getId().equals(destination.getId())) {
+                totalTime += d.getElement().getWaitingTime();
+            }
+            totalTime += shuttle.getTime();
+            lastOrigin = d;
+            path.add(lastOrigin.getElement());
+        }
+
+        return new Path(path, totalTime);
+    }
+
+    /**
+     * Helper method that returns the edge between two vertices
+     *
+     * @param origin vertex
+     * @param destination vertex
+     * @return the edge between the two vertices or null
+     */
+    private ShuttleBase shuttleBetween(TerminalBase origin, TerminalBase destination) {
+        var originVertex = terminalVertices.get(origin);
+        var destinationVertex = terminalVertices.get(destination);
+
+        var edge =  adjacencyMap.getEdge(originVertex, destinationVertex);
+        if (edge != null) {
+            return edge.getElement();
+        }
         return null;
     }
 
+
     @Override
     public Path findFastestPath(TerminalBase origin, TerminalBase destination) {
-        return null;
+        var originVertex = terminalVertices.get(origin);
+
+        var shortestPathMap =
+                GraphUtilities.shortestPathDijkstra(this.adjacencyMap, originVertex, (e) -> {
+            return e.getTime();
+        });
+
+        // Sort in order traveled
+        var  sortedMap =  shortestPathMap.entrySet().
+                stream().
+                sorted(Map.Entry.comparingByValue()).
+                collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+
+        return getPath(destination, sortedMap);
     }
 
     /* Implement all the necessary methods of the Airport here */
@@ -190,10 +285,19 @@ public class Airport extends AirportBase {
 }
 
 
+/**
+ *  Represents a position in a list
+ * @param <E> type
+ */
 interface Position<E> {
     E getElement() throws IllegalStateException;
 }
 
+/**
+ *  A Generic minimal implementation of a positional list
+ *  to be used with AdjacencyMap
+ * @param <E> type
+ */
 class PositionalLinkedList<E> {
 
     private static class Node<E> implements Position<E> {
@@ -247,33 +351,10 @@ class PositionalLinkedList<E> {
         head.setNext(tail);
     }
 
-    private Position<E> position(Node<E> node) {
-        if (node == head || node == tail)
-            return null;   // do not expose user to the sentinels
-        return node;
-    }
 
     public int size() { return size; }
 
     public boolean isEmpty() { return size == 0; }
-
-    public Position<E> first() {
-        return position(head.getNext());
-    }
-
-    public Position<E> last() {
-        return position(tail.getPrev());
-    }
-
-    public Position<E> before(Position<E> p) throws IllegalArgumentException {
-        Node<E> node = (Node<E>) p;
-        return position(node.getPrev());
-    }
-
-    public Position<E> after(Position<E> p) throws IllegalArgumentException {
-        Node<E> node = (Node<E>) p;
-        return position(node.getNext());
-    }
 
     private Position<E> addBetween(E e, Node<E> pred, Node<E> succ) {
         Node<E> newest = new Node<>(e, pred, succ);  // create and link a new node
@@ -283,42 +364,17 @@ class PositionalLinkedList<E> {
         return newest;
     }
 
-    public Position<E> addFirst(E e) {
-        return addBetween(e, head, head.getNext());       // just after the header
-    }
-
     public Position<E> addLast(E e) {
-        return addBetween(e, tail.getPrev(), tail);     // just before the trailer
+        return addBetween(e, tail.getPrev(), tail);
     }
 
-
-    public Position<E> addBefore(Position<E> p, E e)
-            throws IllegalArgumentException {
-        Node<E> node = (Node<E>) p;
-        return addBetween(e, node.getPrev(), node);
-    }
-
-
-    public Position<E> addAfter(Position<E> p, E e)
-            throws IllegalArgumentException {
-        Node<E> node = (Node<E>) p;
-        return addBetween(e, node, node.getNext());
-    }
-
-
-    public E set(Position<E> p, E e) throws IllegalArgumentException {
-        Node<E> node = (Node<E>) p;
-        E answer = node.getElement();
-        node.setElement(e);
-        return answer;
-    }
 
     public E remove(Position<E> p) throws IllegalArgumentException {
         Node<E> node = (Node<E>) p;
-        Node<E> predecessor = node.getPrev();
-        Node<E> successor = node.getNext();
-        predecessor.setNext(successor);
-        successor.setPrev(predecessor);
+        Node<E> previous = node.getPrev();
+        Node<E> preceding = node.getNext();
+        previous.setNext(preceding);
+        preceding.setPrev(previous);
         size--;
         E answer = node.getElement();
         node.setElement(null);
@@ -327,24 +383,20 @@ class PositionalLinkedList<E> {
         return answer;
     }
 
-    public String toString() {
-        StringBuilder sb = new StringBuilder("(");
+    public void forEach(Consumer<E> c) {
         Node<E> walk = head.getNext();
         while (walk != tail) {
-            sb.append(walk.getElement());
+            c.accept(walk.getElement());
             walk = walk.getNext();
-            if (walk != tail)
-                sb.append(", ");
         }
-        sb.append(")");
-        return sb.toString();
     }
+
 }
 
 
 /**
  *
- * Implemented using Lecture notes and course recommended resources
+ * Implemented using Lecture notes and course resources
  *
  * @param <V> Generic class for vertex
  * @param <E> Generic class for Edge
@@ -402,9 +454,6 @@ class AdjacencyMap<V, E> {
             return element;
         }
 
-        public void setElement(E element) {
-            this.element = element;
-        }
 
         public Position<Edge<E>> getPosition() {
             return position;
@@ -418,19 +467,11 @@ class AdjacencyMap<V, E> {
             return endpoints;
         }
 
-        public void setEndpoints(Vertex<V>[] endpoints) {
-            this.endpoints = endpoints;
-        }
     }
 
     public Edge<E> getEdge(Vertex<V> u, Vertex<V> v) {
         return u.getOutgoing().get(v);
     }
-
-    public Vertex<V> asVertex(V element) {
-        return new Vertex<>(element);
-    }
-
 
     public List<Edge<E>> outgoingEdges(Vertex<V> v) {
         return v.getOutgoing().values().stream().collect(Collectors.toList());
@@ -485,5 +526,233 @@ class AdjacencyMap<V, E> {
             return null;
         }
     }
+
+    public PositionalLinkedList<Vertex<V>> getVertices() {
+        return vertices;
+    }
+
+    public PositionalLinkedList<Edge<E>> getEdges() {
+        return edges;
+    }
 }
 
+/**
+ *
+ *
+ * A Generic bare bone Heap Adaptable Priority Queue to help with Dijkstra's Algorithm
+ *
+ * @param <K>
+ * @param <V>
+ */
+class PriorityQueue<K,V> {
+    private ArrayList<Entry<K,V>> heap = new ArrayList<>();
+    private Comparator<K> comparator;
+
+    public PriorityQueue() {
+       this.comparator = (a, b) -> ((Comparable<K>) a).compareTo(b);
+    }
+
+    public int size() {
+        return heap.size();
+    }
+
+    public boolean isEmpty() {
+        return size() == 0;
+    }
+
+    /* Swap the entries at indices i and j in the array list */
+    private void heapSwap(int i, int j) {
+        Entry<K,V> temporary = heap.get(i);
+        heap.set(i, heap.get(j));
+        heap.set(j, temporary);
+    }
+
+    private void swap(int i, int j) {
+        heapSwap(i,j); // perform heap swap
+        // Reset the  entry's index
+        heap.get(i).setIndex(i);
+        heap.get(j).setIndex(j);
+    }
+
+    /**
+     *  Restores the heap property through moving the entry at index j upward or downward
+     * @param j index
+     */
+    private void bubble(int j) {
+        if (j > 0 && compareEntryKeys(heap.get(j), heap.get(parentOf(j))) < 0)
+            upHeap(j);
+        else
+            downHeap(j);                   //  it may not need to move
+    }
+
+    public Entry<K,V> insert(K key, V value) {
+        Entry<K,V> newestEntry = new Entry<>(key, value, heap.size());
+        heap.add(newestEntry);                // adds new entry to the end of the list
+        upHeap(heap.size() - 1);         // perform up heap on newly added entry
+        return newestEntry;
+    }
+
+    public void remove(Entry<K,V> entry)  {
+        if (entry != null) {
+            int j = entry.getIndex();
+            if (j == heap.size() - 1)        // entry is in last position
+                heap.remove(heap.size() - 1);  // so we just remove it
+            else {
+                swap(j, heap.size() - 1);      // swap entry with last position
+                heap.remove(heap.size() - 1);  // then we get rid of it
+                bubble(j);                     // then fix entry displaced by the swapping
+            }
+        }
+    }
+
+    public Entry<K,V> removeMin() {
+        if (heap.isEmpty()) return null;
+        Entry<K,V> entry = heap.get(0);
+        swap(0, heap.size() - 1);              // put the min item at the end
+        heap.remove(heap.size() - 1);          // then remove it from list;
+        downHeap(0);                           // downheap on root to fix it
+        return entry;
+    }
+
+
+
+    public void replaceKey(Entry<K,V> entry, K key) {
+        if (entry != null && key != null) {
+            entry.setKey(key);
+            bubble(entry.getIndex());      // given the new key we may need to move entry
+        }
+    }
+
+    private int compareEntryKeys(Entry<K,V> a, Entry<K,V> b) {
+        return comparator.compare(a.getKey(), b.getKey());
+    }
+
+
+    // Utility methods
+    public int parentOf(int j) { return (j-1) / 2; }
+    public int leftOf(int j) { return 2*j + 1; }
+    public int rightOf(int j) { return 2*j + 2; }
+    public boolean hasLeft(int j) { return leftOf(j) < heap.size(); }
+    public boolean hasRight(int j) { return rightOf(j) < heap.size(); }
+
+    protected void upHeap(int j) {
+        while (j > 0) {
+            int p = parentOf(j);
+            if (compareEntryKeys(heap.get(j), heap.get(p)) >= 0) break;
+            swap(j, p);
+            j = p;
+        }
+    }
+
+    protected void downHeap(int j) {
+        while (hasLeft(j)) {
+            int leftIndex = leftOf(j);
+            int smallestChildIndex = leftIndex;
+            if (hasRight(j)) {
+                int rightIndex = rightOf(j);
+                if (compareEntryKeys(heap.get(leftIndex), heap.get(rightIndex)) > 0)
+                    smallestChildIndex = rightIndex;
+            }
+            if (compareEntryKeys(heap.get(smallestChildIndex), heap.get(j)) >= 0)
+                break;
+            swap(j, smallestChildIndex);
+            j = smallestChildIndex;
+        }
+    }
+
+    public static class Entry<K,V> {
+        private K key;  // key
+        private V value;  // value
+        int index;
+
+        public Entry(K key, V value, int index) {
+            this.key = key;
+            this.value = value;
+            this.index = index;
+        }
+
+        public K getKey() {
+            return key;
+        }
+        public V getValue() {
+            return value;
+        }
+
+        public void setKey(K key) {
+            this.key = key;
+        }
+
+        public int getIndex() {
+            return index;
+        }
+
+        public void setIndex(int index) {
+            this.index = index;
+        }
+    }
+}
+
+class GraphUtilities {
+
+    public static <V, E> Map<AdjacencyMap<V,E>.Vertex<V>, Integer>
+    shortestPathDijkstra(AdjacencyMap<V,E> g, AdjacencyMap<V,E>.Vertex<V> src,
+                         Function<E, Integer> edgeConverter) {
+        Map<AdjacencyMap<V,E>.Vertex<V>, Integer> d = new HashMap<>();
+        Map<AdjacencyMap<V,E>.Vertex<V>, Integer> l = new HashMap<>();
+        Map<AdjacencyMap<V,E>.Vertex<V>, AdjacencyMap<V,E>.Vertex<V>> parent = new HashMap<>();
+        Map<AdjacencyMap<V, E>.Vertex<V>, Integer> cloud = new HashMap<>();
+        PriorityQueue<Integer, AdjacencyMap<V,E>.Vertex<V>> pq;
+        pq = new PriorityQueue<>();
+        Map<AdjacencyMap<V,E>.Vertex<V>,PriorityQueue.Entry<Integer,AdjacencyMap<V,E>.Vertex<V>>> pqTokens;
+        pqTokens = new HashMap<>();
+
+        /*
+         * For all vertices, give the src vertices a distance of 0
+         * all others get a distance of INFINITY (INT_MAX_VALUE);
+         *
+         * we use internal iteration of PositionalList
+         */
+        g.getVertices().forEach(v -> {
+            if (v == src) {
+                d.put(v, 0);
+                parent.put(v, null);
+            } else {
+                d.put(v, Integer.MAX_VALUE);
+                // l.put(v, Integer.MAX_VALUE);
+            }
+            l.put(v, 0);
+            pqTokens.put(v, pq.insert(d.get(v), v));
+        });
+
+        /*
+         * We begin adding reachable vertices to the cloud
+         */
+        while (!pq.isEmpty()) {
+            PriorityQueue.Entry<Integer, AdjacencyMap<V,E>.Vertex<V>> entry = pq.removeMin();
+            int key = entry.getKey();
+            AdjacencyMap<V,E>.Vertex<V> u = entry.getValue();
+            cloud.put(u, key);                             // the  distance to u vertex (actual)
+            pqTokens.remove(u);                            // u is removed from pq
+            for (AdjacencyMap<V,E>.Edge<E> e : g.outgoingEdges(u)) {
+                AdjacencyMap<V,E>.Vertex<V> v = g.opposite(u,e);
+                if (cloud.get(v) == null) {
+                    // perform relaxation step on edge (u,v)
+                    int weight = edgeConverter.apply(e.getElement());
+                    if (d.get(u) + weight < d.get(v)) {              // is it a better path to v?
+                        d.put(v, d.get(u) + weight);                   // then update the distance
+                        parent.put(v, u);
+                        l.put(v, l.get(parent.get(v)) + 1);
+                        pq.replaceKey(pqTokens.get(v), d.get(v));   // update the pq entry
+                    }
+                    else if ((d.get(u)+weight==d.get(v))&&(l.get(u)+1<l.get(v))) {
+                        pq.replaceKey(pqTokens.get(v), d.get(v));
+                        parent.put(v, u);
+                        l.put(v, l.get(u) + 1);
+                    }
+                }
+            }
+        }
+        return l;         // we now have the only reachable vertices with edge  count from source
+    }
+
+}
