@@ -146,9 +146,15 @@ public class Airport extends AirportBase {
             if (!d.getElement().getId().equals(destination.getId())) {
                 totalTime += d.getElement().getWaitingTime();
             }
+
             totalTime += shuttle.getTime();
             lastOrigin = d;
             path.add(lastOrigin.getElement());
+        }
+
+        // Destination doesn't seem to be reachable
+        if(!lastOrigin.getElement().getId().equals(destination.getId())) {
+            return null;
         }
 
         return new Path(path, totalTime);
@@ -180,7 +186,9 @@ public class Airport extends AirportBase {
     public Path findFastestPath(TerminalBase origin, TerminalBase destination) {
         var originVertex = terminalVertices.get(origin);
         var destinationVertex = terminalVertices.get(destination);
-
+        if (originVertex == null || destinationVertex == null) {
+            return null;
+        }
         var fastestPathMap =
                 GraphUtilities.fastestPathDijkstra(this.adjacencyMap, originVertex, destinationVertex, (e) -> {
                     return e.getTime();

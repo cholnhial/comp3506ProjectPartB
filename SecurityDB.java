@@ -76,12 +76,12 @@ public class SecurityDB extends SecurityDBBase {
 
     @Override
     public int size() {
-        return hashMap.size();
+        return hashMap.getCapacity();
     }
 
     @Override
     public String get(String passportId) {
-        return hashMap.get(calculateHashCode(passportId));
+        return hashMap.get(calculateHashCode(passportId), passportId);
     }
 
     @Override
@@ -127,7 +127,7 @@ public class SecurityDB extends SecurityDBBase {
 
     @Override
     public int getIndex(String passportId) {
-        return hashMap.getIndex(calculateHashCode(passportId));
+        return hashMap.getIndex(calculateHashCode(passportId), passportId);
     }
 
     private int getNextPrimeFrom(int start) {
@@ -180,7 +180,7 @@ class SecurityHashMap {
     }
 
     public SecurityHashMapEntry getEntry(int key, String original) {
-        int hashIndex = getIndex(key);
+        int hashIndex = hash(key);
 
         if (isEmpty()) {
             return null;
@@ -201,7 +201,7 @@ class SecurityHashMap {
     }
 
     public void updateAttempts(int key, String original) {
-        int hashIndex = getIndex(key);
+        int hashIndex = hash(key);
 
         if (isEmpty()) {
             return; // nothing to do
@@ -222,7 +222,7 @@ class SecurityHashMap {
     }
 
     public String put(int key, String passportId, String value) {
-        int hashIndex = getIndex(key);
+        int hashIndex = hash(key);
         SecurityHashMapEntry entry = new SecurityHashMapEntry(key, passportId, value);
 
         if (size == maxCapacity) {
@@ -261,7 +261,7 @@ class SecurityHashMap {
      * returns removed entry value otherwise
      */
     public String remove(int key, String original) {
-        int hashIndex = getIndex(key);
+        int hashIndex = hash(key);
 
         if (isEmpty()) {
             return null;
@@ -294,15 +294,15 @@ class SecurityHashMap {
      * @return null is table is empty or null if jey is not found,
      * returns the entry at the key
      */
-    public String get(int key) {
-        int hashIndex = getIndex(key);
+    public String get(int key, String original) {
+        int hashIndex = hash(key);
 
         if (isEmpty()) {
             return null;
         }
 
         for (int i = 0; i < capacity; i++) {
-            if (buckets[hashIndex] != null && buckets[hashIndex].getKey() == key) {
+            if (buckets[hashIndex] != null && buckets[hashIndex].getPassportId().equals(original)) {
                 SecurityHashMapEntry entry = buckets[hashIndex];
                 return entry.getValue();
             }
@@ -320,8 +320,29 @@ class SecurityHashMap {
         return size;
     }
 
-    public int getIndex(int key) {
-        return key % capacity;
+    public int getCapacity() {
+        return capacity;
+    }
+
+    private int  hash(int key) {
+        return  key % capacity;
+    }
+
+    public int getIndex(int key, String original) {
+        key = hash(key);
+        for (int i = 0; i < capacity; i++) {
+            if (buckets[key] != null &&  buckets[key].getPassportId().equals(original)) {
+                return key;
+            }
+
+            if (key + 1 < capacity) {
+                key++;
+            } else {
+                key = 0;
+            }
+        }
+
+        return key;
     }
 
     public boolean isEmpty() {
@@ -335,7 +356,7 @@ class SecurityHashMap {
         String value;
 
         public SecurityHashMapEntry(int key, String passportId, String value) {
-            attempts = 0;
+            attempts = 1;
             this.key = key;
             this.passportId = passportId;
             this.value = value;
