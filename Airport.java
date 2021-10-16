@@ -100,11 +100,13 @@ public class Airport extends AirportBase {
     public Path findShortestPath(TerminalBase origin, TerminalBase destination) {
         var originVertex = terminalVertices.get(origin);
         var destinationVertex = terminalVertices.get(destination);
+        if (originVertex == null || destinationVertex == null) {
+            return null;
+        }
 
-        var shortestPathMap =
-                GraphUtilities.shortestPathDijkstra(this.adjacencyMap, originVertex, (e) -> {
-                    return e.getTime();
-                });
+      var shortestPathMap =   GraphUtilities.shortestPathBFS(this.adjacencyMap, originVertex, destinationVertex, (e) -> {
+          return e.getTime();
+      });
 
         // Sort in order traveled
         var sortedMap = shortestPathMap.entrySet().
@@ -112,22 +114,13 @@ public class Airport extends AirportBase {
                 sorted(Map.Entry.comparingByValue()).
                 collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
-        if (sortedMap.get(destinationVertex) > 0) {
-            // test if origin has a path directly to destination
-            if (shuttleBetween(origin, destination) != null) {
-                // remove all other nodes other than origin and destination
-                sortedMap.entrySet().removeIf(e -> !e.getKey().getElement().getId().equals(origin.getId()) &&
-                        !e.getKey().getElement().getId().equals(destination.getId()));
-            }
-        }
-
-        return getPath(destination, (LinkedHashMap<AdjacencyMap<TerminalBase, ShuttleBase>.Vertex<TerminalBase>, Integer>) sortedMap);
+        return getPath(destination, sortedMap);
     }
 
     /**
      * Helper method to build path
      *
-     * @param destination
+     * @param destination the destination vertex path
      * @param sortedMap   the sorted map returned from Dijkstra's algorithm
      * @return the path
      */
@@ -171,6 +164,9 @@ public class Airport extends AirportBase {
     private ShuttleBase shuttleBetween(TerminalBase origin, TerminalBase destination) {
         var originVertex = terminalVertices.get(origin);
         var destinationVertex = terminalVertices.get(destination);
+        if (originVertex == null || destinationVertex == null) {
+            return null;
+        }
 
         var edge = adjacencyMap.getEdge(originVertex, destinationVertex);
         if (edge != null) {
@@ -183,14 +179,15 @@ public class Airport extends AirportBase {
     @Override
     public Path findFastestPath(TerminalBase origin, TerminalBase destination) {
         var originVertex = terminalVertices.get(origin);
+        var destinationVertex = terminalVertices.get(destination);
 
-        var shortestPathMap =
-                GraphUtilities.shortestPathDijkstra(this.adjacencyMap, originVertex, (e) -> {
+        var fastestPathMap =
+                GraphUtilities.fastestPathDijkstra(this.adjacencyMap, originVertex, destinationVertex, (e) -> {
                     return e.getTime();
                 });
 
         // Sort in order traveled
-        var sortedMap = shortestPathMap.entrySet().
+        var sortedMap = fastestPathMap.entrySet().
                 stream().
                 sorted(Map.Entry.comparingByValue()).
                 collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
@@ -230,6 +227,7 @@ public class Airport extends AirportBase {
 
         /* Implement all the necessary methods of the Shuttle here */
     }
+
 }
 
 /**
@@ -304,7 +302,7 @@ class PositionalLinkedList<E> {
     public boolean isEmpty() { return size == 0; }
 
     private Position<E> addBetween(E e, Node<E> pred, Node<E> succ) {
-        Node<E> newest = new Node<>(e, pred, succ);  // create and link a new node
+        Node<E> newest = new Node<>(e, pred, succ);
         pred.setNext(newest);
         succ.setPrev(newest);
         size++;
@@ -316,7 +314,7 @@ class PositionalLinkedList<E> {
     }
 
 
-    public E remove(Position<E> p) throws IllegalArgumentException {
+    public E remove(Position<E> p) {
         Node<E> node = (Node<E>) p;
         Node<E> previous = node.getPrev();
         Node<E> preceding = node.getNext();
@@ -349,8 +347,8 @@ class PositionalLinkedList<E> {
  * @param <E> Generic class for Edge
  */
 class AdjacencyMap<V, E> {
-    private PositionalLinkedList<Vertex<V>> vertices = new PositionalLinkedList<>();
-    private PositionalLinkedList<Edge<E>> edges = new PositionalLinkedList<>();
+    private final PositionalLinkedList<Vertex<V>> vertices = new PositionalLinkedList<>();
+    private final PositionalLinkedList<Edge<E>> edges = new PositionalLinkedList<>();
 
 
     public class Vertex<V> {
@@ -555,9 +553,9 @@ class PriorityQueue<K,V> {
     public Entry<K,V> removeMin() {
         if (heap.isEmpty()) return null;
         Entry<K,V> entry = heap.get(0);
-        swap(0, heap.size() - 1);              // put the min item at the end
-        heap.remove(heap.size() - 1);          // then remove it from list;
-        downHeap(0);                           // downheap on root to fix it
+        swap(0, heap.size() - 1);
+        heap.remove(heap.size() - 1);
+        downHeap(0);
         return entry;
     }
 
@@ -566,7 +564,7 @@ class PriorityQueue<K,V> {
     public void replaceKey(Entry<K,V> entry, K key) {
         if (entry != null && key != null) {
             entry.setKey(key);
-            bubble(entry.getIndex());      // given the new key we may need to move entry
+            bubble(entry.getIndex());
         }
     }
 
@@ -608,8 +606,8 @@ class PriorityQueue<K,V> {
     }
 
     public static class Entry<K,V> {
-        private K key;  // key
-        private V value;  // value
+        private K key;
+        private V value;
         int index;
 
         public Entry(K key, V value, int index) {
@@ -639,13 +637,16 @@ class PriorityQueue<K,V> {
     }
 }
 
+/**
+ *  Utility class containing graph algorithms
+ */
 class GraphUtilities {
 
     public static <V, E> Map<AdjacencyMap<V,E>.Vertex<V>, Integer>
-    shortestPathDijkstra(AdjacencyMap<V,E> g, AdjacencyMap<V,E>.Vertex<V> src,
-                         Function<E, Integer> edgeConverter) {
+    fastestPathDijkstra(AdjacencyMap<V,E> g, AdjacencyMap<V,E>.Vertex<V> src,
+                        AdjacencyMap<V,E>.Vertex<V> dest,
+                        Function<E, Integer> edgeConverter) {
         Map<AdjacencyMap<V,E>.Vertex<V>, Integer> d = new HashMap<>();
-        Map<AdjacencyMap<V,E>.Vertex<V>, Integer> l = new HashMap<>();
         Map<AdjacencyMap<V,E>.Vertex<V>, AdjacencyMap<V,E>.Vertex<V>> parent = new HashMap<>();
         Map<AdjacencyMap<V, E>.Vertex<V>, Integer> cloud = new HashMap<>();
         PriorityQueue<Integer, AdjacencyMap<V,E>.Vertex<V>> pq;
@@ -665,9 +666,7 @@ class GraphUtilities {
                 parent.put(v, null);
             } else {
                 d.put(v, Integer.MAX_VALUE);
-                // l.put(v, Integer.MAX_VALUE);
             }
-            l.put(v, 0);
             pqTokens.put(v, pq.insert(d.get(v), v));
         });
 
@@ -679,27 +678,74 @@ class GraphUtilities {
             int key = entry.getKey();
             AdjacencyMap<V,E>.Vertex<V> u = entry.getValue();
             cloud.put(u, key);                             // the  distance to u vertex (actual)
-            pqTokens.remove(u);                            // u is removed from pq
+            pqTokens.remove(u);                            // u is removed from the priorty queue
             for (AdjacencyMap<V,E>.Edge<E> e : g.outgoingEdges(u)) {
                 AdjacencyMap<V,E>.Vertex<V> v = g.opposite(u,e);
                 if (cloud.get(v) == null) {
-                    // perform relaxation step on edge (u,v)
+                    // do relaxation on edge (u,v)
                     int weight = edgeConverter.apply(e.getElement());
-                    if (d.get(u) + weight < d.get(v)) {              // is it a better path to v?
+                    if (d.get(u) + weight < d.get(v)) {              // is it a better path to v
                         d.put(v, d.get(u) + weight);                   // then update the distance
-                        parent.put(v, u);
-                        l.put(v, l.get(parent.get(v)) + 1);
                         pq.replaceKey(pqTokens.get(v), d.get(v));   // update the pq entry
-                    }
-                    else if ((d.get(u)+weight==d.get(v))&&(l.get(u)+1<l.get(v))) {
-                        pq.replaceKey(pqTokens.get(v), d.get(v));
                         parent.put(v, u);
-                        l.put(v, l.get(u) + 1);
                     }
                 }
             }
         }
-        return l;         // we now have the only reachable vertices with edge  count from source
+
+        Map<AdjacencyMap<V, E>.Vertex<V>, Integer> result = new HashMap<>();
+        result.put(src, cloud.get(src));
+        var currentVertex = dest;
+        while(parent.get(currentVertex) != null) {
+            result.put(currentVertex, cloud.get(currentVertex));
+            currentVertex = parent.get(currentVertex);
+        }
+
+        return result; // the vertices containing the fastest path
     }
+
+
+    public static <V,E>  Map<AdjacencyMap<V,E>.Vertex<V>, Integer> shortestPathBFS(AdjacencyMap<V,E> g,
+                                                                                   AdjacencyMap<V,E>.Vertex<V> s,
+                                                                                   AdjacencyMap<V,E>.Vertex<V> d,
+                                                                                   Function<E, Integer> edgeConverter) {
+        Set<AdjacencyMap<V,E>.Vertex<V>> known = new HashSet<>();
+        PositionalLinkedList<AdjacencyMap<V,E>.Vertex<V>> level = new PositionalLinkedList<>();
+        known.add(s);
+        Map<AdjacencyMap<V,E>.Vertex<V>, Integer> dis = new HashMap<>();
+        g.getVertices().forEach(v -> {
+            dis.put(v, 0);
+        });
+        Map<AdjacencyMap<V,E>.Vertex<V>, AdjacencyMap<V,E>.Vertex<V>> parent = new HashMap<>();
+        parent.put(s, null);
+        level.addLast(s);
+        while (!level.isEmpty()) {
+            PositionalLinkedList<AdjacencyMap<V,E>.Vertex<V>> nextLevel = new PositionalLinkedList<>();
+            level.forEach(u -> {
+                        for (AdjacencyMap<V,E>.Edge<E> e : g.outgoingEdges(u)) {
+                            AdjacencyMap<V, E>.Vertex<V> v = g.opposite(u, e);
+                            if (!known.contains(v)) {
+                                parent.put(v, u);
+                                int weight = edgeConverter.apply(e.getElement());
+                                dis.put(v, dis.get(u) + weight);
+                                known.add(v);
+                                nextLevel.addLast(v);
+                            }
+                        }
+            });
+            level = nextLevel;
+        }
+
+        Map<AdjacencyMap<V, E>.Vertex<V>, Integer> result = new HashMap<>();
+        result.put(s, dis.get(s));
+        var currentVertex = d;
+        while(parent.get(currentVertex) != null) {
+            result.put(currentVertex, dis.get(currentVertex));
+            currentVertex = parent.get(currentVertex);
+        }
+
+        return result; // the vertices containing the shortest path
+    }
+
 
 }
