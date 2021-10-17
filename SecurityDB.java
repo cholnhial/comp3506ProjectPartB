@@ -11,6 +11,7 @@ public class SecurityDB extends SecurityDBBase {
         super(numPlanes, numPassengersPerPlane);
 
         int capacity = numPlanes * numPassengersPerPlane;
+        capacity = capacity > MAX_CAPACITY ? MAX_CAPACITY : capacity;
         // HashMap capacity needs to be set to a prime number
         capacity = getNextPrimeFrom(capacity);
         hashMap = new SecurityHashMap(capacity, MAX_CAPACITY);
@@ -331,6 +332,10 @@ class SecurityHashMap {
     public int getIndex(int key, String original) {
         key = hash(key);
         for (int i = 0; i < capacity; i++) {
+            if (buckets[key] == null) {
+                break; // empty slot found
+            }
+
             if (buckets[key] != null &&  buckets[key].getPassportId().equals(original)) {
                 return key;
             }
@@ -340,6 +345,8 @@ class SecurityHashMap {
             } else {
                 key = 0;
             }
+
+
         }
 
         return key;
