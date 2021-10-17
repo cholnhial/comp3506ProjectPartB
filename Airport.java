@@ -1,4 +1,5 @@
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -190,8 +191,10 @@ public class Airport extends AirportBase {
             return null;
         }
         var fastestPathMap =
-                GraphUtilities.fastestPathDijkstra(this.adjacencyMap, originVertex, destinationVertex, (e) -> {
-                    return e.getTime();
+                GraphUtilities.fastestPathDijkstra(this.adjacencyMap, originVertex, destinationVertex, (e, u) -> {
+                    int weight = e.getTime();
+                    int waitTime = u.getWaitingTime();
+                    return weight + waitTime;
                 });
 
         // Sort in order traveled
@@ -653,7 +656,7 @@ class GraphUtilities {
     public static <V, E> Map<AdjacencyMap<V,E>.Vertex<V>, Integer>
     fastestPathDijkstra(AdjacencyMap<V,E> g, AdjacencyMap<V,E>.Vertex<V> src,
                         AdjacencyMap<V,E>.Vertex<V> dest,
-                        Function<E, Integer> edgeConverter) {
+                        BiFunction<E, V, Integer> edgeConverter) {
         Map<AdjacencyMap<V,E>.Vertex<V>, Integer> d = new HashMap<>();
         Map<AdjacencyMap<V,E>.Vertex<V>, AdjacencyMap<V,E>.Vertex<V>> parent = new HashMap<>();
         Map<AdjacencyMap<V, E>.Vertex<V>, Integer> cloud = new HashMap<>();
@@ -691,7 +694,7 @@ class GraphUtilities {
                 AdjacencyMap<V,E>.Vertex<V> v = g.opposite(u,e);
                 if (cloud.get(v) == null) {
                     // do relaxation on edge (u,v)
-                    int weight = edgeConverter.apply(e.getElement());
+                    int weight = edgeConverter.apply(e.getElement(), u.getElement());
                     if (d.get(u) + weight < d.get(v)) {              // is it a better path to v
                         d.put(v, d.get(u) + weight);                   // then update the distance
                         pq.replaceKey(pqTokens.get(v), d.get(v));   // update the pq entry
@@ -709,8 +712,9 @@ class GraphUtilities {
             currentVertex = parent.get(currentVertex);
         }
 
-        return result; // the vertices containing the fastest path
+        return result;
     }
+
 
 
     public static <V,E>  Map<AdjacencyMap<V,E>.Vertex<V>, Integer> shortestPathBFS(AdjacencyMap<V,E> g,
